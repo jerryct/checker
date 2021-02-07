@@ -1,0 +1,5 @@
+[
+  { "directory": "/home/jerry/playground/checker/assets",
+    "command": "/usr/bin/clang++ -v -resource-dir /home/jerry/playground/llvm-project/_install/lib/clang/11.1.0 -o assignment.o -c assignment.cpp",
+    "file": "/home/jerry/playground/checker/assetsassignment.cpp" },
+]
