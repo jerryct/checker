@@ -40,6 +40,10 @@ public:
   void onStartOfTranslationUnit() override { replacement_ = {}; }
 
   void onEndOfTranslationUnit() override {
+    if (replacement_.Replacements.empty()) {
+      return;
+    }
+
     std::error_code ec;
     llvm::raw_fd_ostream file{replacement_.MainSourceFile + ".yaml", ec, llvm::sys::fs::OF_None};
     if (ec) {
