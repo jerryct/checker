@@ -13,16 +13,22 @@ namespace {
 
 class MatchHandler : public clang::ast_matchers::MatchFinder::MatchCallback {
 public:
-  explicit MatchHandler(std::map<std::string, clang::tooling::Replacements> &replace) : replace_(replace) {}
-
   void run(const clang::ast_matchers::MatchFinder::MatchResult &result) override {
     const clang::Stmt *s{result.Nodes.getNodeAs<clang::Stmt>("ref")};
     if (nullptr == s) {
       return;
     }
 
-    clang::tooling::Replacement r{*(result.SourceManager), s->getBeginLoc(), 0, "/*found*/"};
-    std::ignore = replace_[r.getFilePath().str()].add(r);
+    if (replacement_.MainSourceFile.empty()) {
+      const clang::FileID main_file{result.SourceManager->getMainFileID()};
+      const clang::FileEntry *file_entry{result.SourceManager->getFileEntryForID(main_file)};
+      if (nullptr == file_entry) {
+        return;
+      }
+      replacement_.MainSourceFile = file_entry->getName().str();
+    }
+
+    replacement_.Replacements.emplace_back(*(result.SourceManager), s->getBeginLoc(), 0, "/*found*/");
 
     clang::DiagnosticsEngine &engine{result.Context->getDiagnostics()};
     const auto id = engine.getCustomDiagID(clang::DiagnosticsEngine::Warning, "%0");
@@ -31,47 +37,37 @@ public:
     engine.Report(s->getBeginLoc(), id) << "found" << source_range << fix_it;
   }
 
-private:
-  std::map<std::string, clang::tooling::Replacements> &replace_;
-};
+  void onStartOfTranslationUnit() override { replacement_ = {}; }
 
-void Export(const std::map<std::string, clang::tooling::Replacements> &replacements) {
-  for (const auto &r : replacements) {
+  void onEndOfTranslationUnit() override {
     std::error_code ec;
-    llvm::raw_fd_ostream file{r.first + ".yaml", ec, llvm::sys::fs::OF_None};
+    llvm::raw_fd_ostream file{replacement_.MainSourceFile + ".yaml", ec, llvm::sys::fs::OF_None};
     if (ec) {
       llvm::errs() << llvm::format("Error opening replacement file: %s\n", ec.message().c_str());
-      continue;
+      return;
     }
 
-    clang::tooling::TranslationUnitReplacements tu;
-    tu.MainSourceFile = r.first;
-    tu.Replacements.insert(tu.Replacements.end(), r.second.begin(), r.second.end());
-
     llvm::yaml::Output yaml{file};
-    yaml << tu;
+    yaml << replacement_;
   }
-}
+
+private:
+  clang::tooling::TranslationUnitReplacements replacement_;
+};
 
 } // namespace
 
 int main(int argc, const char **argv) {
   llvm::cl::OptionCategory cat{"refactor"};
   clang::tooling::CommonOptionsParser op{argc, argv, cat};
-  clang::tooling::RefactoringTool tool{op.getCompilations(), op.getSourcePathList()};
+  clang::tooling::ClangTool tool{op.getCompilations(), op.getSourcePathList()};
 
-  MatchHandler handler{tool.getReplacements()};
+  MatchHandler handler{};
 
   clang::ast_matchers::MatchFinder finder{};
   using namespace clang::ast_matchers;
   auto m = cxxOperatorCallExpr(hasArgument(0, hasType(cxxRecordDecl(hasName("Foo")))), isAssignmentOperator());
   finder.addMatcher(m.bind("ref"), &handler);
 
-  if (int result = tool.run(clang::tooling::newFrontendActionFactory(&finder).get())) {
-    return result;
-  }
-
-  Export(tool.getReplacements());
-
-  return 0;
+  return tool.run(clang::tooling::newFrontendActionFactory(&finder).get());
 }
