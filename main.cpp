@@ -63,8 +63,13 @@ private:
 
 int main(int argc, const char **argv) {
   llvm::cl::OptionCategory cat{"refactor"};
-  clang::tooling::CommonOptionsParser op{argc, argv, cat};
-  clang::tooling::ClangTool tool{op.getCompilations(), op.getSourcePathList()};
+  auto op = clang::tooling::CommonOptionsParser::create(argc, argv, cat);
+  if (!op) {
+    llvm::errs() << llvm::format("Not enough positional command line arguments specified\n")
+                 << clang::tooling::CommonOptionsParser::HelpMessage;
+    return 1;
+  }
+  clang::tooling::ClangTool tool{op->getCompilations(), op->getSourcePathList()};
 
   MatchHandler handler{};
 

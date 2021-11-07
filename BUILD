@@ -15,5 +15,5 @@ cc_binary(
         "assets/assignment.cpp",
         "assets/compile_commands.json",
     ],
-    deps = ["@llvm//:clang-cpp"],
+    deps = ["@llvm-project//clang:libclang_static"],
 )

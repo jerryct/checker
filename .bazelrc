@@ -1,0 +1,8 @@
+
+build --experimental_guard_against_concurrent_changes
+
+build:clang --repo_env=CC=clang
+build:clang --cxxopt=-std=c++14 --host_cxxopt=-std=c++14
+
+build:gcc --repo_env=CC=gcc
+build:gcc --cxxopt=-std=c++14 --host_cxxopt=-std=c++14
